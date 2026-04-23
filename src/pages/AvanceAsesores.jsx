@@ -167,20 +167,50 @@ const AvanceAsesores = () => {
     setMensaje({ tipo: '', texto: '' });
 
     try {
-      const insertData = datos.map(item => ({
-        fecha: fechaSeleccionada,
-        asesor: item.asesor,
-        cant_leads_gestionados: item.cant_leads_gestionados,
-        acciones_efectivas: item.acciones_efectivas,
-      }));
+      const asesoresNoEncontrados = [];
+      const insertData = datos.map(item => {
+        const asesorBd = asesoresDb.find(a =>
+          a.nombre.toLowerCase() === (item.asesor || '').toLowerCase() ||
+          (item.asesor || '').toLowerCase().includes(a.nombre.toLowerCase())
+        );
+
+        if (!asesorBd || asesorBd.id.toString().includes('fallback')) {
+          asesoresNoEncontrados.push(item.asesor);
+          return null;
+        }
+
+        return {
+          fecha: fechaSeleccionada,
+          asesor_id: asesorBd.id,
+          cant_leads_gestionados: item.cant_leads_gestionados,
+          acciones_efectivas: item.acciones_efectivas,
+        };
+      }).filter(Boolean);
+
+      if (insertData.length === 0) {
+        const nombresUnicos = [...new Set(asesoresNoEncontrados)].join(', ');
+        setMensaje({
+          tipo: 'error',
+          texto: `No se pudo guardar: ningún asesor coincide con los registrados en el sistema. Asesores no encontrados: ${nombresUnicos}`
+        });
+        return;
+      }
 
       const { error } = await supabase
         .from('avance_diario')
-        .upsert(insertData, { onConflict: 'fecha,asesor' });
+        .upsert(insertData, { onConflict: 'fecha,asesor_id' });
 
       if (error) throw error;
 
-      setMensaje({ tipo: 'success', texto: 'Datos guardados correctamente.' });
+      if (asesoresNoEncontrados.length > 0) {
+        const nombresUnicos = [...new Set(asesoresNoEncontrados)].join(', ');
+        setMensaje({
+          tipo: 'warning',
+          texto: `Se guardaron ${insertData.length} registros. Se omitieron ${asesoresNoEncontrados.length} porque estos asesores no existen en el sistema: ${nombresUnicos}`
+        });
+      } else {
+        setMensaje({ tipo: 'success', texto: 'Datos guardados correctamente.' });
+      }
     } catch (e) {
       console.error(e);
       setMensaje({ tipo: 'error', texto: `Error al guardar: ${e.message}` });
