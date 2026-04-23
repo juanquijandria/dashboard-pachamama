@@ -22,23 +22,64 @@ const asesoresListaOriginal = [
   'Vanessa Lisett Albornoz Moncada'
 ];
 
-const parseExcelDate = (dateStr) => {
-  if (!dateStr) return new Date().toISOString();
-  try {
-    const parts = dateStr.toString().trim().split(' ');
-    const datePart = parts[0];
-    const timePart = parts[1] || '00:00';
-    
-    if (datePart.includes('/')) {
-      const [day, month, year] = datePart.split('/');
-      if (day && month && year) {
-        const [hour, minute] = timePart.split(':');
-        return new Date(year, month - 1, day, hour || 0, minute || 0).toISOString();
-      }
+const parseExcelDate = (value) => {
+  if (value === undefined || value === null || value === '') return new Date().toISOString();
+  
+  // 1. Número serial de Excel (ej. 45320.5)
+  if (typeof value === 'number' || (!isNaN(value) && !value.toString().includes('/'))) {
+    try {
+      const serial = parseFloat(value);
+      const ms = Math.round((serial - 25569) * 86400 * 1000);
+      const jsDate = new Date(ms);
+      
+      // Ajustar el offset de zona horaria para que no se desplace de día
+      const userTimezoneOffset = jsDate.getTimezoneOffset() * 60000;
+      const finalDate = new Date(jsDate.getTime() + userTimezoneOffset);
+      
+      return finalDate.toISOString();
+    } catch (e) {
+      return new Date().toISOString();
     }
-    const fallbackDate = new Date(dateStr);
-    if (!isNaN(fallbackDate.getTime())) return fallbackDate.toISOString();
-    return new Date().toISOString();
+  }
+
+  // 2. String (ej. "23/04/2026 9:00:25 a. m.")
+  try {
+    const strValue = value.toString().trim();
+    
+    // Buscar la fecha DD/MM/YYYY
+    const dateMatch = strValue.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    let day = new Date().getDate();
+    let month = new Date().getMonth();
+    let year = new Date().getFullYear();
+    
+    if (dateMatch) {
+      day = parseInt(dateMatch[1], 10);
+      month = parseInt(dateMatch[2], 10) - 1; // JS months son 0-11
+      year = parseInt(dateMatch[3], 10);
+    } else {
+      // Intento nativo si no hay slash
+      const fallback = new Date(strValue);
+      if (!isNaN(fallback.getTime())) return fallback.toISOString();
+      return new Date().toISOString();
+    }
+
+    // Buscar la hora H:mm o HH:mm
+    let hour = 0, minute = 0;
+    const timeMatch = strValue.match(/(\d{1,2}):(\d{2})/);
+    if (timeMatch) {
+      hour = parseInt(timeMatch[1], 10);
+      minute = parseInt(timeMatch[2], 10);
+      
+      // Manejar AM/PM
+      const lowerStr = strValue.toLowerCase();
+      const isPM = lowerStr.includes('p.m.') || lowerStr.includes('pm') || lowerStr.includes('p. m.');
+      const isAM = lowerStr.includes('a.m.') || lowerStr.includes('am') || lowerStr.includes('a. m.');
+      
+      if (isPM && hour < 12) hour += 12;
+      if (isAM && hour === 12) hour = 0;
+    }
+
+    return new Date(year, month, day, hour, minute, 0).toISOString();
   } catch (err) {
     return new Date().toISOString();
   }
@@ -140,7 +181,20 @@ const Citas = () => {
           const matchExato = asesoresDb.find(a => a.nombre.toLowerCase() === rawAsesor.toLowerCase());
           const asesor = matchExato ? matchExato.nombre : (rawAsesor || 'Desconocido');
           
-          const fechaOriginal = row['Fecha_de_cita'] || row['Fecha de cita'];
+          // Buscar dinámicamente la columna de fecha
+          let fechaOriginal = null;
+          const fechaKeys = Object.keys(row).filter(key => 
+            key.startsWith('Fecha_de_') || 
+            key === 'Fecha de cita' || 
+            key === 'Fecha de creación'
+          );
+          if (fechaKeys.length > 0) {
+            fechaOriginal = row[fechaKeys[0]];
+          } else {
+            const fallbackKey = Object.keys(row).find(k => k.toLowerCase().includes('fecha'));
+            if (fallbackKey) fechaOriginal = row[fallbackKey];
+          }
+
           const tipo = (row['Tipo_de_cita'] || row['Tipo de cita'] || '').toString().trim() || 'General';
           const interes = (row['Nivel_de_Interes'] || row['Nivel de Interes'] || '').toString().trim() || 'Medio';
           const estado = (row['Estado_de_cita'] || row['Estado de cita'] || '').toString().trim() || 'Pendiente';
@@ -515,13 +569,11 @@ const Citas = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col text-sm text-gray-900 font-semibold">
-                          <span className="flex items-center">
-                            <Calendar className="h-3.5 w-3.5 mr-1 text-gray-400" />
+                        <div className="flex flex-col text-sm text-gray-900">
+                          <span className="flex items-center text-sm font-normal text-gray-900">
                             {format(new Date(row.fecha_hora), "dd/MM/yyyy")}
                           </span>
                           <span className="flex items-center text-gray-500 mt-1 text-xs">
-                            <Clock className="h-3.5 w-3.5 mr-1 text-gray-400" />
                             {format(new Date(row.fecha_hora), "HH:mm")} hrs
                           </span>
                         </div>
