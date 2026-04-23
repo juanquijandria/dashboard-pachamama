@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
-import { Search, Plus, Trash2, CheckCircle2, FileText, User } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { Search, Plus, Trash2, CheckCircle2, FileText, User, Image as ImageIcon } from 'lucide-react';
 
 const asesoresListaOriginal = [
   'Adrian Emir Flores Cossio',
@@ -19,6 +20,7 @@ const Cotizaciones = () => {
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
   const [busqueda, setBusqueda] = useState('');
+  const contenedorRef = useRef(null);
   
   const [nuevaCotizacion, setNuevaCotizacion] = useState({
     asesor: '',
@@ -136,11 +138,42 @@ const Cotizaciones = () => {
     d.cliente_nombre?.toLowerCase().includes(busqueda.toLowerCase())
   );
 
+  const copiarImagen = async () => {
+    if (contenedorRef.current) {
+      try {
+        const canvas = await html2canvas(contenedorRef.current, {
+          backgroundColor: '#ffffff',
+          scale: 2
+        });
+        canvas.toBlob(async (blob) => {
+          try {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+            setMensaje({ tipo: 'success', texto: '¡Imagen copiada al portapapeles!' });
+          } catch (err) {
+            setMensaje({ tipo: 'error', texto: 'No se pudo copiar la imagen.' });
+          }
+        });
+      } catch (err) {
+        setMensaje({ tipo: 'error', texto: 'Error al generar la imagen.' });
+      }
+      setTimeout(() => setMensaje({ tipo: '', texto: '' }), 3000);
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Módulo de Cotizaciones</h2>
-        <p className="text-sm text-gray-500">Gestión de cotizaciones emitidas a clientes.</p>
+    <div className="space-y-6 bg-gray-50 p-4 rounded-xl" ref={contenedorRef}>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Módulo de Cotizaciones</h2>
+          <p className="text-sm text-gray-500">Gestión de cotizaciones emitidas a clientes.</p>
+        </div>
+        <button 
+          onClick={copiarImagen}
+          className="flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-sm font-medium"
+        >
+          <ImageIcon className="h-4 w-4 mr-2" />
+          Copiar Imagen
+        </button>
       </div>
 
       {mensaje.texto && (

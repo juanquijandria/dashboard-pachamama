@@ -4,7 +4,7 @@ import html2canvas from 'html2canvas';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, LineChart, Line, Legend
 } from 'recharts';
-import { Trophy, Activity, Calendar, DollarSign, TrendingUp, CheckSquare, Square, Award, Camera } from 'lucide-react';
+import { Trophy, Activity, Calendar, DollarSign, TrendingUp, CheckSquare, Square, Award, Camera, Settings, X, Save } from 'lucide-react';
 
 const asesoresListaOriginal = [
   'Adrian Emir Flores Cossio',
@@ -16,12 +16,12 @@ const asesoresListaOriginal = [
   'Vanessa Albornoz Moncada'
 ];
 
-const PESOS = {
-  gestiones: 1,
-  efectivas: 0.5,
-  cotizaciones: 1.5,
-  citas_concretadas: 4,
-  ventas: 10
+const PESOS_DEFAULT = {
+  pts_gestiones: 1,
+  pts_efectivas: 0.5,
+  pts_citas: 4,
+  pts_cotizaciones: 1.5,
+  pts_ventas: 10
 };
 
 const DashboardHome = () => {
@@ -31,6 +31,7 @@ const DashboardHome = () => {
     cotizaciones: [],
     ventas: []
   });
+  const [configsMensuales, setConfigsMensuales] = useState({});
   const [cargando, setCargando] = useState(true);
   const [mensajeCopy, setMensajeCopy] = useState('');
   
@@ -45,31 +46,100 @@ const DashboardHome = () => {
     ventas: true
   });
 
-  useEffect(() => {
-    const cargarTodo = async () => {
-      setCargando(true);
-      try {
-        const [resGestiones, resCitas, resCotizaciones, resVentas] = await Promise.all([
-          supabase.from('gestiones_diarias').select('cant_leads_gestionados, acciones_efectivas, asesores(nombre)'),
-          supabase.from('citas').select('estado, asesores(nombre)'),
-          supabase.from('cotizaciones').select('asesores(nombre)'),
-          supabase.from('ventas').select('asesores(nombre)')
-        ]);
+  // Estado del Modal de Configuración
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [mesConfig, setMesConfig] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [configForm, setConfigForm] = useState({ ...PESOS_DEFAULT });
+  const [guardandoConfig, setGuardandoConfig] = useState(false);
 
-        setDatosBrutos({
-          gestiones: resGestiones.data || [],
-          citas: resCitas.data || [],
-          cotizaciones: resCotizaciones.data || [],
-          ventas: resVentas.data || []
-        });
-      } catch (e) {
-        console.error("Error cargando dashboard:", e);
-      } finally {
-        setCargando(false);
-      }
-    };
+  const cargarTodo = async () => {
+    setCargando(true);
+    try {
+      const [resGestiones, resCitas, resCotizaciones, resVentas, resConfig] = await Promise.all([
+        supabase.from('gestiones_diarias').select('fecha, cant_leads_gestionados, acciones_efectivas, asesores(nombre)'),
+        supabase.from('citas').select('fecha_hora, estado, asesores(nombre)'),
+        supabase.from('cotizaciones').select('fecha_emision, asesores(nombre)'),
+        supabase.from('ventas').select('fecha_venta, asesores(nombre)'),
+        supabase.from('configuracion_puntos').select('*')
+      ]);
+
+      setDatosBrutos({
+        gestiones: resGestiones.data || [],
+        citas: resCitas.data || [],
+        cotizaciones: resCotizaciones.data || [],
+        ventas: resVentas.data || []
+      });
+
+      const confMap = {};
+      (resConfig.data || []).forEach(c => {
+        confMap[c.mes] = c;
+      });
+      setConfigsMensuales(confMap);
+    } catch (e) {
+      console.error("Error cargando dashboard:", e);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
     cargarTodo();
   }, []);
+
+  // Al cambiar el mes en el Modal, cargar los valores si existen
+  useEffect(() => {
+    if (configsMensuales[mesConfig]) {
+      setConfigForm({
+        pts_gestiones: configsMensuales[mesConfig].pts_gestiones,
+        pts_efectivas: configsMensuales[mesConfig].pts_efectivas,
+        pts_citas: configsMensuales[mesConfig].pts_citas,
+        pts_cotizaciones: configsMensuales[mesConfig].pts_cotizaciones,
+        pts_ventas: configsMensuales[mesConfig].pts_ventas
+      });
+    } else {
+      setConfigForm({ ...PESOS_DEFAULT });
+    }
+  }, [mesConfig, configsMensuales]);
+
+  const handleSaveConfig = async () => {
+    setGuardandoConfig(true);
+    try {
+      const payload = {
+        mes: mesConfig,
+        pts_gestiones: parseFloat(configForm.pts_gestiones) || 0,
+        pts_efectivas: parseFloat(configForm.pts_efectivas) || 0,
+        pts_citas: parseFloat(configForm.pts_citas) || 0,
+        pts_cotizaciones: parseFloat(configForm.pts_cotizaciones) || 0,
+        pts_ventas: parseFloat(configForm.pts_ventas) || 0
+      };
+
+      const { error } = await supabase
+        .from('configuracion_puntos')
+        .upsert(payload, { onConflict: 'mes' });
+        
+      if (error) throw error;
+      
+      setMensajeCopy('Configuración guardada exitosamente.');
+      setTimeout(() => setMensajeCopy(''), 3000);
+      setShowConfigModal(false);
+      cargarTodo(); // Recargar datos para aplicar nueva config
+    } catch (error) {
+      console.error("Error guardando config", error);
+      alert("Error al guardar la configuración.");
+    } finally {
+      setGuardandoConfig(false);
+    }
+  };
+
+  // Extraer YYYY-MM de una fecha ISO
+  const getMesStr = (fechaIso) => {
+    if (!fechaIso) return new Date().toISOString().slice(0, 7);
+    return fechaIso.slice(0, 7);
+  };
+
+  const getConfigMes = (mesStr) => {
+    return configsMensuales[mesStr] || PESOS_DEFAULT;
+  };
 
   // Calcular Puntos Dinámicos
   const datosCalculados = useMemo(() => {
@@ -94,8 +164,9 @@ const DashboardHome = () => {
     datosBrutos.gestiones.forEach(row => {
       const nombre = getNombreAsesor(row);
       if (nombre && mapaAsesores[nombre]) {
-        mapaAsesores[nombre].ptsGestiones += (row.cant_leads_gestionados || 0) * PESOS.gestiones;
-        mapaAsesores[nombre].ptsEfectivas += (row.acciones_efectivas || 0) * PESOS.efectivas;
+        const conf = getConfigMes(getMesStr(row.fecha));
+        mapaAsesores[nombre].ptsGestiones += (row.cant_leads_gestionados || 0) * conf.pts_gestiones;
+        mapaAsesores[nombre].ptsEfectivas += (row.acciones_efectivas || 0) * conf.pts_efectivas;
       }
     });
 
@@ -103,7 +174,8 @@ const DashboardHome = () => {
     datosBrutos.citas.forEach(row => {
       const nombre = getNombreAsesor(row);
       if (nombre && mapaAsesores[nombre] && row.estado === 'Concretada') {
-        mapaAsesores[nombre].ptsCitas += PESOS.citas_concretadas;
+        const conf = getConfigMes(getMesStr(row.fecha_hora));
+        mapaAsesores[nombre].ptsCitas += conf.pts_citas;
       }
     });
 
@@ -111,7 +183,8 @@ const DashboardHome = () => {
     datosBrutos.cotizaciones.forEach(row => {
       const nombre = getNombreAsesor(row);
       if (nombre && mapaAsesores[nombre]) {
-        mapaAsesores[nombre].ptsCotizaciones += PESOS.cotizaciones;
+        const conf = getConfigMes(getMesStr(row.fecha_emision));
+        mapaAsesores[nombre].ptsCotizaciones += conf.pts_cotizaciones;
       }
     });
 
@@ -119,7 +192,8 @@ const DashboardHome = () => {
     datosBrutos.ventas.forEach(row => {
       const nombre = getNombreAsesor(row);
       if (nombre && mapaAsesores[nombre]) {
-        mapaAsesores[nombre].ptsVentas += PESOS.ventas;
+        const conf = getConfigMes(getMesStr(row.fecha_venta));
+        mapaAsesores[nombre].ptsVentas += conf.pts_ventas;
       }
     });
 
@@ -138,7 +212,7 @@ const DashboardHome = () => {
     });
 
     return arrayResultado.sort((a, b) => b.puntosTotales - a.puntosTotales);
-  }, [datosBrutos, metricasActivas]);
+  }, [datosBrutos, metricasActivas, configsMensuales]);
 
   const toggleMetrica = (metrica) => {
     setMetricasActivas(prev => ({ ...prev, [metrica]: !prev[metrica] }));
@@ -191,15 +265,24 @@ const DashboardHome = () => {
   );
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
-      <div>
-        <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
-          <Trophy className="h-8 w-8 text-pachamama-earth" />
-          Índice de Productividad y Rendimiento (IPR)
-        </h2>
-        <p className="mt-1 text-base text-gray-500">
-          Tablero interactivo en tiempo real basado en el algoritmo de puntaje comercial Pachamama.
-        </p>
+    <div className="space-y-8 max-w-7xl mx-auto relative">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
+            <Trophy className="h-8 w-8 text-pachamama-earth" />
+            Índice de Productividad y Rendimiento (IPR)
+          </h2>
+          <p className="mt-1 text-base text-gray-500">
+            Tablero interactivo en tiempo real basado en el algoritmo de puntaje comercial Pachamama.
+          </p>
+        </div>
+        <button 
+          onClick={() => setShowConfigModal(true)}
+          className="flex items-center px-4 py-2 bg-white text-pachamama-earth rounded-md hover:bg-gray-50 transition-colors border border-gray-300 text-sm font-bold shadow-sm"
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          Editar Puntos
+        </button>
       </div>
 
       {mensajeCopy && (
@@ -211,10 +294,10 @@ const DashboardHome = () => {
 
       {/* Controles de Métricas Interactivos */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {metricBox('gestiones', 'Gestiones (+1/0.5 pts)', <Activity size={20} />, metricasActivas.gestiones, () => toggleMetrica('gestiones'), 'bg-blue-500')}
-        {metricBox('reuniones', 'Citas Concretadas (+4 pts)', <Calendar size={20} />, metricasActivas.reuniones, () => toggleMetrica('reuniones'), 'bg-purple-500')}
-        {metricBox('cotizaciones', 'Cotizaciones (+1.5 pts)', <DollarSign size={20} />, metricasActivas.cotizaciones, () => toggleMetrica('cotizaciones'), 'bg-orange-500')}
-        {metricBox('ventas', 'Ventas Cerradas (+10 pts)', <TrendingUp size={20} />, metricasActivas.ventas, () => toggleMetrica('ventas'), 'bg-green-600')}
+        {metricBox('gestiones', 'Gestiones/Efectivas', <Activity size={20} />, metricasActivas.gestiones, () => toggleMetrica('gestiones'), 'bg-blue-500')}
+        {metricBox('reuniones', 'Citas Concretadas', <Calendar size={20} />, metricasActivas.reuniones, () => toggleMetrica('reuniones'), 'bg-purple-500')}
+        {metricBox('cotizaciones', 'Cotizaciones', <DollarSign size={20} />, metricasActivas.cotizaciones, () => toggleMetrica('cotizaciones'), 'bg-orange-500')}
+        {metricBox('ventas', 'Ventas Cerradas', <TrendingUp size={20} />, metricasActivas.ventas, () => toggleMetrica('ventas'), 'bg-green-600')}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -310,6 +393,71 @@ const DashboardHome = () => {
           
         </div>
       </div>
+
+      {/* Modal de Configuración */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="bg-pachamama-earth px-6 py-4 flex justify-between items-center text-white">
+              <h3 className="text-lg font-bold">Configuración IPR Mensual</h3>
+              <button onClick={() => setShowConfigModal(false)} className="text-white hover:text-gray-200">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Mes a Configurar</label>
+                <input 
+                  type="month" 
+                  value={mesConfig}
+                  onChange={(e) => setMesConfig(e.target.value)}
+                  className="w-full border-gray-300 rounded-md shadow-sm focus:ring-pachamama-green p-2 border bg-gray-50 font-medium"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Gestiones (Leads)</label>
+                  <input type="number" step="0.1" value={configForm.pts_gestiones} onChange={(e) => setConfigForm({...configForm, pts_gestiones: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm p-2 border" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Efectivas</label>
+                  <input type="number" step="0.1" value={configForm.pts_efectivas} onChange={(e) => setConfigForm({...configForm, pts_efectivas: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm p-2 border" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Citas Concretadas</label>
+                  <input type="number" step="0.1" value={configForm.pts_citas} onChange={(e) => setConfigForm({...configForm, pts_citas: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm p-2 border" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Cotizaciones</label>
+                  <input type="number" step="0.1" value={configForm.pts_cotizaciones} onChange={(e) => setConfigForm({...configForm, pts_cotizaciones: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm p-2 border" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Ventas Cerradas</label>
+                  <input type="number" step="0.1" value={configForm.pts_ventas} onChange={(e) => setConfigForm({...configForm, pts_ventas: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm p-2 border" />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button 
+                  onClick={() => setShowConfigModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md font-medium text-sm transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveConfig}
+                  disabled={guardandoConfig}
+                  className="flex items-center px-4 py-2 bg-pachamama-green text-white rounded-md hover:bg-green-700 font-bold text-sm transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Guardar Configuración
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

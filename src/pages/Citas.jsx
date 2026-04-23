@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import Papa from 'papaparse';
+import html2canvas from 'html2canvas';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
-  Calendar, Upload, CheckSquare, Square, Filter, Plus, Save, CheckCircle2, Clock, Users, BarChart3 
+  Calendar, Upload, CheckSquare, Square, Filter, Plus, Save, CheckCircle2, Clock, Users, BarChart3, Image as ImageIcon 
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell 
@@ -25,6 +25,7 @@ const Citas = () => {
   const [asesoresDb, setAsesoresDb] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
+  const contenedorRef = useRef(null);
   
   // Filtros
   const [filtroAsesor, setFiltroAsesor] = useState('');
@@ -237,6 +238,31 @@ const Citas = () => {
     }
   };
 
+  const copiarImagen = async () => {
+    if (contenedorRef.current) {
+      try {
+        const canvas = await html2canvas(contenedorRef.current, {
+          backgroundColor: '#ffffff',
+          scale: 2 // Mejor calidad
+        });
+        
+        canvas.toBlob(async (blob) => {
+          try {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob })
+            ]);
+            setMensaje({ tipo: 'success', texto: '¡Imagen copiada al portapapeles!' });
+          } catch (err) {
+            setMensaje({ tipo: 'error', texto: 'No se pudo copiar la imagen (permisos de navegador).' });
+          }
+        });
+      } catch (err) {
+        setMensaje({ tipo: 'error', texto: 'Error al generar la imagen.' });
+      }
+      setTimeout(() => setMensaje({ tipo: '', texto: '' }), 3000);
+    }
+  };
+
   // Datos filtrados
   const datosFiltrados = datos.filter(d => {
     const pasaAsesor = filtroAsesor ? d.asesor === filtroAsesor : true;
@@ -255,7 +281,7 @@ const Citas = () => {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-gray-50 p-4 rounded-xl" ref={contenedorRef}>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Módulo de Reuniones</h2>
@@ -267,6 +293,13 @@ const Citas = () => {
             <span>Importar CSV</span>
             <input type="file" accept=".csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
           </div>
+          <button 
+            onClick={copiarImagen}
+            className="flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-sm font-medium"
+          >
+            <ImageIcon className="h-4 w-4 mr-2" />
+            Copiar Imagen
+          </button>
           <button 
             onClick={() => setMostrarFormulario(!mostrarFormulario)}
             className="flex items-center px-3 py-2 bg-pachamama-earth text-white rounded-md hover:bg-[#7a4f25] transition-colors text-sm font-medium"
