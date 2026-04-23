@@ -33,6 +33,7 @@ const AvanceAsesores = () => {
   const [datos, setDatos] = useState([]);
   const [asesoresDb, setAsesoresDb] = useState([]);
   const [cargando, setCargando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
   const [asesoresOcultos, setAsesoresOcultos] = useState([]);
   
@@ -68,7 +69,7 @@ const AvanceAsesores = () => {
       setCargando(true);
       try {
         const { data, error } = await supabase
-          .from('gestiones_diarias')
+          .from('avance_diario')
           .select(`
             id,
             asesor_id,
@@ -162,48 +163,29 @@ const AvanceAsesores = () => {
   };
 
   const guardarEnBD = async () => {
-    setCargando(true);
+    setGuardando(true);
     setMensaje({ tipo: '', texto: '' });
-    
+
     try {
-      // Filtrar y preparar datos para Supabase
-      const insertData = datos.map(item => {
-        const asesorBd = asesoresDb.find(a => 
-          a.nombre.toLowerCase() === item.asesor.toLowerCase()
-        );
-        
-        if (!asesorBd || asesorBd.id.toString().includes('fallback')) {
-          return null;
-        }
+      const insertData = datos.map(item => ({
+        fecha: fechaSeleccionada,
+        asesor: item.asesor,
+        cant_leads_gestionados: item.cant_leads_gestionados,
+        acciones_efectivas: item.acciones_efectivas,
+      }));
 
-        return {
-          asesor_id: asesorBd.id,
-          cant_leads_gestionados: item.cant_leads_gestionados,
-          acciones_efectivas: item.acciones_efectivas,
-          fecha: fechaSeleccionada
-        };
-      }).filter(Boolean);
+      const { error } = await supabase
+        .from('avance_diario')
+        .upsert(insertData, { onConflict: 'fecha,asesor' });
 
-      if (insertData.length > 0) {
-        // En una app real, podrías querer hacer un borrado previo para la misma fecha o upsert
-        const { error } = await supabase.from('gestiones_diarias').upsert(
-          insertData,
-          { onConflict: 'asesor_id, fecha' } // Asumiendo que quisieras un composite key
-        );
-        
-        if (error) {
-          // Si falla el upsert (por falta de constraints), intentamos borrado previo e insert
-          await supabase.from('gestiones_diarias').delete().eq('fecha', fechaSeleccionada);
-          await supabase.from('gestiones_diarias').insert(insertData);
-        }
-        setMensaje({ tipo: 'success', texto: 'Datos guardados correctamente.' });
-      } else {
-        setMensaje({ tipo: 'warning', texto: 'No hay datos válidos para guardar en BD (comprueba conexión).' });
-      }
+      if (error) throw error;
+
+      setMensaje({ tipo: 'success', texto: 'Datos guardados correctamente.' });
     } catch (e) {
-      setMensaje({ tipo: 'error', texto: 'Hubo un problema al guardar. Operando en modo local.' });
+      console.error(e);
+      setMensaje({ tipo: 'error', texto: `Error al guardar: ${e.message}` });
     } finally {
-      setCargando(false);
+      setGuardando(false);
       setTimeout(() => setMensaje({ tipo: '', texto: '' }), 3000);
     }
   };
@@ -272,13 +254,13 @@ const AvanceAsesores = () => {
             Copiar Imagen
           </button>
           
-          <button 
+          <button
             onClick={guardarEnBD}
-            disabled={cargando}
+            disabled={guardando}
             className="flex items-center px-4 py-2 bg-pachamama-green text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50"
           >
             <Save className="h-4 w-4 mr-2" />
-            Guardar
+            {guardando ? 'Guardando...' : 'Guardar'}
           </button>
         </div>
       </div>

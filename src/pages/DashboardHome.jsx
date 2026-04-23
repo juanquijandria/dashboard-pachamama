@@ -57,7 +57,7 @@ const DashboardHome = () => {
     setCargando(true);
     try {
       const [resGestiones, resCitas, resCotizaciones, resVentas, resConfig] = await Promise.all([
-        supabase.from('gestiones_diarias').select('fecha, cant_leads_gestionados, acciones_efectivas, asesores(nombre)'),
+        supabase.from('avance_diario').select('fecha, cant_leads_gestionados, acciones_efectivas, asesores(nombre)'),
         supabase.from('citas').select('fecha_hora, estado, asesores(nombre)'),
         supabase.from('cotizaciones').select('fecha_emision, asesores(nombre)'),
         supabase.from('ventas').select('fecha_venta, asesores(nombre)'),
@@ -145,6 +145,7 @@ const DashboardHome = () => {
   // Calcular Puntos Dinámicos
   const datosCalculados = useMemo(() => {
     const mapaAsesores = {};
+    const mesActual = new Date().toISOString().slice(0, 7); // YYYY-MM
     
     asesoresListaOriginal.forEach(nombre => {
       mapaAsesores[nombre] = {
@@ -164,8 +165,9 @@ const DashboardHome = () => {
     // Procesar Gestiones (Leads y Efectivas)
     datosBrutos.gestiones.forEach(row => {
       const nombre = getNombreAsesor(row);
-      if (nombre && mapaAsesores[nombre]) {
-        const conf = getConfigMes(getMesStr(row.fecha));
+      const rowMes = getMesStr(row.fecha);
+      if (nombre && mapaAsesores[nombre] && rowMes === mesActual) {
+        const conf = getConfigMes(rowMes);
         mapaAsesores[nombre].ptsGestiones += (row.cant_leads_gestionados || 0) * conf.pts_gestiones;
         mapaAsesores[nombre].ptsEfectivas += (row.acciones_efectivas || 0) * conf.pts_efectivas;
       }
@@ -174,8 +176,9 @@ const DashboardHome = () => {
     // Procesar Citas
     datosBrutos.citas.forEach(row => {
       const nombre = getNombreAsesor(row);
-      if (nombre && mapaAsesores[nombre] && row.estado === 'Concretada') {
-        const conf = getConfigMes(getMesStr(row.fecha_hora));
+      const rowMes = getMesStr(row.fecha_hora);
+      if (nombre && mapaAsesores[nombre] && row.estado === 'Concretada' && rowMes === mesActual) {
+        const conf = getConfigMes(rowMes);
         mapaAsesores[nombre].ptsCitas += conf.pts_citas;
       }
     });
@@ -183,8 +186,9 @@ const DashboardHome = () => {
     // Procesar Cotizaciones
     datosBrutos.cotizaciones.forEach(row => {
       const nombre = getNombreAsesor(row);
-      if (nombre && mapaAsesores[nombre]) {
-        const conf = getConfigMes(getMesStr(row.fecha_emision));
+      const rowMes = getMesStr(row.fecha_emision);
+      if (nombre && mapaAsesores[nombre] && rowMes === mesActual) {
+        const conf = getConfigMes(rowMes);
         mapaAsesores[nombre].ptsCotizaciones += conf.pts_cotizaciones;
       }
     });
@@ -192,8 +196,9 @@ const DashboardHome = () => {
     // Procesar Ventas
     datosBrutos.ventas.forEach(row => {
       const nombre = getNombreAsesor(row);
-      if (nombre && mapaAsesores[nombre]) {
-        const conf = getConfigMes(getMesStr(row.fecha_venta));
+      const rowMes = getMesStr(row.fecha_venta);
+      if (nombre && mapaAsesores[nombre] && rowMes === mesActual) {
+        const conf = getConfigMes(rowMes);
         mapaAsesores[nombre].ptsVentas += conf.pts_ventas;
       }
     });

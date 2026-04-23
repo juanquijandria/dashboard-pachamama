@@ -22,67 +22,81 @@ const asesoresListaOriginal = [
   'Vanessa Lisett Albornoz Moncada'
 ];
 
-const parseExcelDate = (value) => {
-  if (value === undefined || value === null || value === '') return new Date().toISOString();
-  
-  // 1. Número serial de Excel (ej. 45320.5)
-  if (typeof value === 'number' || (!isNaN(value) && !value.toString().includes('/'))) {
-    try {
-      const serial = parseFloat(value);
-      const ms = Math.round((serial - 25569) * 86400 * 1000);
-      const jsDate = new Date(ms);
-      
-      // Ajustar el offset de zona horaria para que no se desplace de día
-      const userTimezoneOffset = jsDate.getTimezoneOffset() * 60000;
-      const finalDate = new Date(jsDate.getTime() + userTimezoneOffset);
-      
-      return finalDate.toISOString();
-    } catch (e) {
-      return new Date().toISOString();
-    }
+const pad2 = (n) => String(n).padStart(2, '0');
+
+const splitExcelDateTime = (value) => {
+  if (value === undefined || value === null || value === '') {
+    const now = new Date();
+    return {
+      dateOnly: `${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`,
+      timeOnly: `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
+      iso: now.toISOString(),
+    };
   }
 
-  // 2. String (ej. "23/04/2026 9:00:25 a. m.")
-  try {
-    const strValue = value.toString().trim();
-    
-    // Buscar la fecha DD/MM/YYYY
-    const dateMatch = strValue.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    let day = new Date().getDate();
-    let month = new Date().getMonth();
-    let year = new Date().getFullYear();
-    
-    if (dateMatch) {
-      day = parseInt(dateMatch[1], 10);
-      month = parseInt(dateMatch[2], 10) - 1; // JS months son 0-11
-      year = parseInt(dateMatch[3], 10);
+  let jsDate = null;
+
+  // a) Excel serial number (e.g. 45320.604166)
+  const isSerial =
+    typeof value === 'number' ||
+    (typeof value === 'string' && /^\d+(\.\d+)?$/.test(value.trim()));
+
+  if (isSerial) {
+    const serial = parseFloat(value);
+    const utcMs = Math.round((serial - 25569) * 86400 * 1000);
+    const utc = new Date(utcMs);
+    // Rebuild as local time so the wall-clock values from Excel are preserved.
+    jsDate = new Date(
+      utc.getUTCFullYear(),
+      utc.getUTCMonth(),
+      utc.getUTCDate(),
+      utc.getUTCHours(),
+      utc.getUTCMinutes(),
+      utc.getUTCSeconds()
+    );
+  } else {
+    const str = value.toString().trim();
+
+    // "YYYY-MM-DD HH:mm[:ss]" or "YYYY-MM-DDTHH:mm[:ss]"
+    const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (isoMatch) {
+      jsDate = new Date(
+        parseInt(isoMatch[1], 10),
+        parseInt(isoMatch[2], 10) - 1,
+        parseInt(isoMatch[3], 10),
+        parseInt(isoMatch[4], 10),
+        parseInt(isoMatch[5], 10),
+        parseInt(isoMatch[6] || '0', 10)
+      );
     } else {
-      // Intento nativo si no hay slash
-      const fallback = new Date(strValue);
-      if (!isNaN(fallback.getTime())) return fallback.toISOString();
-      return new Date().toISOString();
+      // "DD/MM/YYYY [HH:mm[:ss] [a.m./p.m.]]"
+      const dateMatch = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (dateMatch) {
+        const day = parseInt(dateMatch[1], 10);
+        const month = parseInt(dateMatch[2], 10) - 1;
+        const year = parseInt(dateMatch[3], 10);
+        let hour = 0, minute = 0;
+        const timeMatch = str.match(/(\d{1,2}):(\d{2})/);
+        if (timeMatch) {
+          hour = parseInt(timeMatch[1], 10);
+          minute = parseInt(timeMatch[2], 10);
+          const lower = str.toLowerCase();
+          const isPM = lower.includes('p.m.') || lower.includes('p. m.') || /\bpm\b/.test(lower);
+          const isAM = lower.includes('a.m.') || lower.includes('a. m.') || /\bam\b/.test(lower);
+          if (isPM && hour < 12) hour += 12;
+          if (isAM && hour === 12) hour = 0;
+        }
+        jsDate = new Date(year, month, day, hour, minute, 0);
+      } else {
+        const fallback = new Date(str);
+        jsDate = isNaN(fallback.getTime()) ? new Date() : fallback;
+      }
     }
-
-    // Buscar la hora H:mm o HH:mm
-    let hour = 0, minute = 0;
-    const timeMatch = strValue.match(/(\d{1,2}):(\d{2})/);
-    if (timeMatch) {
-      hour = parseInt(timeMatch[1], 10);
-      minute = parseInt(timeMatch[2], 10);
-      
-      // Manejar AM/PM
-      const lowerStr = strValue.toLowerCase();
-      const isPM = lowerStr.includes('p.m.') || lowerStr.includes('pm') || lowerStr.includes('p. m.');
-      const isAM = lowerStr.includes('a.m.') || lowerStr.includes('am') || lowerStr.includes('a. m.');
-      
-      if (isPM && hour < 12) hour += 12;
-      if (isAM && hour === 12) hour = 0;
-    }
-
-    return new Date(year, month, day, hour, minute, 0).toISOString();
-  } catch (err) {
-    return new Date().toISOString();
   }
+
+  const dateOnly = `${pad2(jsDate.getDate())}/${pad2(jsDate.getMonth() + 1)}/${jsDate.getFullYear()}`;
+  const timeOnly = `${pad2(jsDate.getHours())}:${pad2(jsDate.getMinutes())}`;
+  return { dateOnly, timeOnly, iso: jsDate.toISOString() };
 };
 
 const Citas = () => {
@@ -174,37 +188,41 @@ const Citas = () => {
         const sheet = workbook.Sheets[sheetName];
         const parsedData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
+        if (parsedData.length === 0) {
+          setMensaje({ tipo: 'warning', texto: 'El archivo no contiene datos.' });
+          e.target.value = null;
+          return;
+        }
+
+        // RULE 1: the date column must be named exactly "Fecha_de_cita" (case-sensitive).
+        const headerKeys = Object.keys(parsedData[0]);
+        if (!headerKeys.includes('Fecha_de_cita')) {
+          console.error('Column "Fecha_de_cita" not found in Excel file.');
+          setMensaje({ tipo: 'error', texto: 'Column "Fecha_de_cita" not found in Excel file.' });
+          e.target.value = null;
+          return;
+        }
+
         const nuevosDatos = [...datos];
 
         parsedData.forEach(row => {
           const rawAsesor = (row['Responsable_de_cita'] || row['Responsable de cita'] || '').toString().trim();
           const matchExato = asesoresDb.find(a => a.nombre.toLowerCase() === rawAsesor.toLowerCase());
           const asesor = matchExato ? matchExato.nombre : (rawAsesor || 'Desconocido');
-          
-          // Buscar dinámicamente la columna de fecha
-          let fechaOriginal = null;
-          const fechaKeys = Object.keys(row).filter(key => 
-            key.startsWith('Fecha_de_') || 
-            key === 'Fecha de cita' || 
-            key === 'Fecha de creación'
-          );
-          if (fechaKeys.length > 0) {
-            fechaOriginal = row[fechaKeys[0]];
-          } else {
-            const fallbackKey = Object.keys(row).find(k => k.toLowerCase().includes('fecha'));
-            if (fallbackKey) fechaOriginal = row[fallbackKey];
-          }
 
           const tipo = (row['Tipo_de_cita'] || row['Tipo de cita'] || '').toString().trim() || 'General';
           const interes = (row['Nivel_de_Interes'] || row['Nivel de Interes'] || '').toString().trim() || 'Medio';
           const estado = (row['Estado_de_cita'] || row['Estado de cita'] || '').toString().trim() || 'Pendiente';
-          
-          const fechaFormateada = parseExcelDate(fechaOriginal);
+
+          // RULE 2: read ONLY "Fecha_de_cita" and split into dateOnly + timeOnly.
+          const { dateOnly, timeOnly, iso } = splitExcelDateTime(row['Fecha_de_cita']);
 
           nuevosDatos.push({
             bd_id: `temp-${Date.now()}-${Math.random()}`,
             asesor,
-            fecha_hora: fechaFormateada,
+            fecha_hora: iso,
+            dateOnly,
+            timeOnly,
             tipo_cita: tipo,
             nivel_interes: interes,
             estado: estado,
@@ -532,7 +550,10 @@ const Citas = () => {
                   Asesor Responsable
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Fecha y Hora
+                  Date
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Time
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Tipo / Interés
@@ -544,9 +565,9 @@ const Citas = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {cargando && datos.length === 0 ? (
-                <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-500">Cargando citas...</td></tr>
+                <tr><td colSpan="6" className="px-6 py-10 text-center text-gray-500">Cargando citas...</td></tr>
               ) : datosFiltrados.length === 0 ? (
-                <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-500">No hay citas que coincidan con los filtros.</td></tr>
+                <tr><td colSpan="6" className="px-6 py-10 text-center text-gray-500">No hay citas que coincidan con los filtros.</td></tr>
               ) : (
                 datosFiltrados.map((row, index) => {
                   const esConcretada = row.estado === 'Concretada';
@@ -569,14 +590,14 @@ const Citas = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col text-sm text-gray-900">
-                          <span className="flex items-center text-sm font-normal text-gray-900">
-                            {format(new Date(row.fecha_hora), "dd/MM/yyyy")}
-                          </span>
-                          <span className="flex items-center text-gray-500 mt-1 text-xs">
-                            {format(new Date(row.fecha_hora), "HH:mm")} hrs
-                          </span>
-                        </div>
+                        <span className="text-sm font-normal text-gray-900">
+                          {row.dateOnly || format(new Date(row.fecha_hora), "dd/MM/yyyy")}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-gray-500">
+                          {row.timeOnly || format(new Date(row.fecha_hora), "HH:mm")}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{row.tipo_cita}</div>
