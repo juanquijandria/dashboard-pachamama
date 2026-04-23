@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -111,16 +111,20 @@ const AvanceAsesores = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const parsedData = results.data;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = evt.target.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const parsedData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
         const nuevosDatos = [...datos];
 
         parsedData.forEach(row => {
           // Mapear "Usuario" a "asesor", "CantLeadsGestionados" y "AccionesEfectiva"
-          const usuarioStr = row['Usuario']?.trim();
+          const usuarioStr = (row['Usuario'] || '').toString().trim();
           const leads = parseInt(row['CantLeadsGestionados'] || row['Cant Leads Gestionados'] || '0', 10);
           const efectivas = parseInt(row['AccionesEfectiva'] || row['Acciones Efectiva'] || '0', 10);
 
@@ -146,15 +150,13 @@ const AvanceAsesores = () => {
         });
 
         setDatos(nuevosDatos);
-        setMensaje({ tipo: 'success', texto: 'CSV importado. Recuerda guardar los cambios.' });
-        
-        // Limpiar el input file
+        setMensaje({ tipo: 'success', texto: 'Excel importado. Recuerda guardar los cambios.' });
         e.target.value = null;
-      },
-      error: (error) => {
-        setMensaje({ tipo: 'error', texto: `Error procesando CSV: ${error.message}` });
+      } catch (error) {
+        setMensaje({ tipo: 'error', texto: `Error procesando Excel: ${error.message}` });
       }
-    });
+    };
+    reader.readAsBinaryString(file);
   };
 
   const guardarEnBD = async () => {
@@ -317,13 +319,13 @@ const AvanceAsesores = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Importar CSV de Gestiones</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Importar Excel de Gestiones</label>
             <div className="relative border-2 border-dashed border-gray-300 rounded-md p-2 text-center hover:bg-gray-50 transition-colors cursor-pointer flex items-center justify-center">
               <Upload className="h-5 w-5 text-gray-400 mr-2" />
-              <span className="text-sm text-gray-600">Subir CSV</span>
+              <span className="text-sm text-gray-600">Subir Excel</span>
               <input 
                 type="file" 
-                accept=".csv" 
+                accept=".xlsx, .xls" 
                 onChange={handleFileUpload}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />

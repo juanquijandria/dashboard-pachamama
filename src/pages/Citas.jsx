@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import html2canvas from 'html2canvas';
+import * as XLSX from 'xlsx';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
@@ -100,23 +101,27 @@ const Citas = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const parsedData = results.data;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = evt.target.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const parsedData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
         const nuevosDatos = [...datos];
 
         parsedData.forEach(row => {
-          const asesor = row['Responsable_de_cita']?.trim() || row['Responsable de cita']?.trim() || 'Desconocido';
+          const asesor = (row['Responsable_de_cita'] || row['Responsable de cita'] || '').toString().trim() || 'Desconocido';
           const fechaOriginal = row['Fecha_de_cita'] || row['Fecha de cita'];
-          const tipo = row['Tipo_de_cita'] || row['Tipo de cita'] || 'General';
-          const interes = row['Nivel_de_Interes'] || row['Nivel de Interes'] || 'Medio';
-          const estado = row['Estado_de_cita'] || row['Estado de cita'] || 'Pendiente';
+          const tipo = (row['Tipo_de_cita'] || row['Tipo de cita'] || '').toString().trim() || 'General';
+          const interes = (row['Nivel_de_Interes'] || row['Nivel de Interes'] || '').toString().trim() || 'Medio';
+          const estado = (row['Estado_de_cita'] || row['Estado de cita'] || '').toString().trim() || 'Pendiente';
           
           let fechaFormateada = new Date().toISOString();
           if (fechaOriginal) {
-            // Intentar parsear (esto puede requerir ajustes según el formato real del CSV)
+            // Excel dates might be numeric if parsed directly, but usually text if defval is used or formatted.
             try {
               const d = new Date(fechaOriginal);
               if (!isNaN(d.getTime())) fechaFormateada = d.toISOString();
@@ -130,7 +135,7 @@ const Citas = () => {
             tipo_cita: tipo,
             nivel_interes: interes,
             estado: estado,
-            cliente_nombre: 'Importado de CSV',
+            cliente_nombre: 'Importado de Excel',
             esNuevo: true
           });
         });
@@ -138,8 +143,11 @@ const Citas = () => {
         setDatos(nuevosDatos);
         setMensaje({ tipo: 'success', texto: `${parsedData.length} citas importadas correctamente.` });
         e.target.value = null;
+      } catch (err) {
+        setMensaje({ tipo: 'error', texto: `Error procesando Excel: ${err.message}` });
       }
-    });
+    };
+    reader.readAsBinaryString(file);
   };
 
   const handleManualSubmit = (e) => {
@@ -290,8 +298,8 @@ const Citas = () => {
         <div className="flex flex-wrap gap-3">
           <div className="relative border border-gray-300 rounded-md p-2 bg-white text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center text-sm font-medium">
             <Upload className="h-4 w-4 mr-2 text-pachamama-earth" />
-            <span>Importar CSV</span>
-            <input type="file" accept=".csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+            <span>Importar Excel</span>
+            <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
           </div>
           <button 
             onClick={copiarImagen}
