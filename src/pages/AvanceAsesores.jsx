@@ -11,7 +11,8 @@ import {
   Eye, 
   Image as ImageIcon, 
   Save,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
 
 const asesoresListaOriginal = [
@@ -32,6 +33,7 @@ const AvanceAsesores = () => {
   const [asesoresDb, setAsesoresDb] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
+  const [asesoresOcultos, setAsesoresOcultos] = useState([]);
   
   const tablaRef = useRef(null);
 
@@ -123,17 +125,25 @@ const AvanceAsesores = () => {
         const nuevosDatos = [...datos];
 
         parsedData.forEach(row => {
-          // Mapear "Usuario" a "asesor", "CantLeadsGestionados" y "AccionesEfectiva"
           const usuarioStr = (row['Usuario'] || '').toString().trim();
           const leads = parseInt(row['CantLeadsGestionados'] || row['Cant Leads Gestionados'] || '0', 10);
           const efectivas = parseInt(row['AccionesEfectiva'] || row['Acciones Efectiva'] || '0', 10);
 
           if (usuarioStr) {
-            // Buscar el asesor más parecido o que incluya el nombre
-            const indice = nuevosDatos.findIndex(d => 
-              d.asesor.toLowerCase().includes(usuarioStr.toLowerCase()) || 
-              usuarioStr.toLowerCase().includes(d.asesor.toLowerCase())
-            );
+            const normExcel = usuarioStr.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            
+            const indice = nuevosDatos.findIndex(d => {
+              const normAsesor = (d.asesor || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              if (normExcel.includes(normAsesor) || normAsesor.includes(normExcel)) return true;
+              
+              const parts = normAsesor.split(' ');
+              if (parts.length >= 2) {
+                const firstName = parts[0];
+                const lastNames = parts.slice(1);
+                return normExcel.includes(firstName) && lastNames.some(ln => normExcel.includes(ln));
+              }
+              return false;
+            });
             
             if (indice !== -1) {
               nuevosDatos[indice].cant_leads_gestionados = leads;
@@ -238,9 +248,12 @@ const AvanceAsesores = () => {
 
   const getColorAvance = (porcentaje) => {
     if (porcentaje >= 100) return 'text-green-600 bg-green-100';
-    if (porcentaje >= 70) return 'text-yellow-600 bg-yellow-100';
+    if (porcentaje >= 50) return 'text-yellow-600 bg-yellow-100';
     return 'text-red-600 bg-red-100';
   };
+
+  const datosOrdenados = [...datos].sort((a, b) => (b.cant_leads_gestionados || 0) - (a.cant_leads_gestionados || 0));
+  const datosVisibles = datosOrdenados.filter(d => !asesoresOcultos.includes(d.asesor));
 
   return (
     <div className="space-y-6">
@@ -366,18 +379,29 @@ const AvanceAsesores = () => {
                     Cargando datos...
                   </td>
                 </tr>
-              ) : datos.map((row, index) => {
+              ) : datosVisibles.map((row, index) => {
                 const avance = calcularAvance(row.acciones_efectivas);
                 return (
                   <tr key={index} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-8 w-8 rounded-full bg-pachamama-green/20 text-pachamama-green flex items-center justify-center font-bold text-xs mr-3">
-                          {modoCiego ? `A${index+1}` : row.asesor.split(' ').map(n => n[0]).slice(0,2).join('')}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div className="h-8 w-8 rounded-full bg-pachamama-green/20 text-pachamama-green flex items-center justify-center font-bold text-xs mr-3">
+                            {modoCiego ? `A${index+1}` : row.asesor.split(' ').map(n => n[0]).slice(0,2).join('')}
+                          </div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {modoCiego ? `Asesor ${index + 1}` : row.asesor}
+                          </div>
                         </div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {modoCiego ? `Asesor ${index + 1}` : row.asesor}
-                        </div>
+                        {!modoCiego && (
+                          <button 
+                            onClick={() => setAsesoresOcultos([...asesoresOcultos, row.asesor])}
+                            className="text-gray-300 hover:text-red-500 transition-colors"
+                            title="Ocultar Asesor"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600 font-semibold">
