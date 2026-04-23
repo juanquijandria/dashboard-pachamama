@@ -292,18 +292,19 @@ const DashboardHome = () => {
               </button>
             </div>
             <div ref={lineChartRef} className="flex-1 p-2 bg-white rounded-lg">
-              <LineChart data={datosCalculados} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis dataKey="nombreLargo" tickFormatter={(v) => v.split(' ')[0]} axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#6b7280'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#6b7280'}} />
-                <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                <Legend iconType="circle" wrapperStyle={{fontSize: '12px'}} />
-                {metricasActivas.gestiones && <Line type="monotone" dataKey="ptsGestiones" name="Gestiones" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />}
-                {metricasActivas.reuniones && <Line type="monotone" dataKey="ptsCitas" name="Citas" stroke="#a855f7" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />}
-                {metricasActivas.cotizaciones && <Line type="monotone" dataKey="ptsCotizaciones" name="Cotizaciones" stroke="#f97316" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />}
-                {metricasActivas.ventas && <Line type="monotone" dataKey="ptsVentas" name="Ventas" stroke="#16a34a" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />}
-              </LineChart>
-            </ResponsiveContainer>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={datosCalculados} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                  <XAxis dataKey="nombreLargo" tickFormatter={(v) => v.split(' ')[0]} axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#6b7280'}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#6b7280'}} />
+                  <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                  <Legend iconType="circle" wrapperStyle={{fontSize: '12px'}} />
+                  {metricasActivas.gestiones && <Line type="monotone" dataKey="ptsGestiones" name="Gestiones" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />}
+                  {metricasActivas.reuniones && <Line type="monotone" dataKey="ptsCitas" name="Citas" stroke="#a855f7" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />}
+                  {metricasActivas.cotizaciones && <Line type="monotone" dataKey="ptsCotizaciones" name="Cotizaciones" stroke="#f97316" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />}
+                  {metricasActivas.ventas && <Line type="monotone" dataKey="ptsVentas" name="Ventas" stroke="#16a34a" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />}
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
           
