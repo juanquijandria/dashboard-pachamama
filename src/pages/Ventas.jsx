@@ -25,6 +25,7 @@ const Ventas = () => {
   
   const [nuevaVenta, setNuevaVenta] = useState({
     asesor: '',
+    area_m2: '',
     fecha: new Date().toISOString().split('T')[0],
     hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false })
   });
@@ -49,7 +50,7 @@ const Ventas = () => {
         // Filtrar por el mes actual o simplemente traer las últimas
         const { data, error } = await supabase
           .from('ventas')
-          .select(`id, fecha_venta, asesores (nombre)`)
+          .select(`id, fecha_venta, area_m2, asesores (nombre)`)
           .order('fecha_venta', { ascending: false })
           .limit(100);
           
@@ -57,7 +58,8 @@ const Ventas = () => {
           setDatos(data.map(item => ({
             id: item.id,
             asesor: item.asesores?.nombre || 'Desconocido',
-            fecha_venta: item.fecha_venta
+            fecha_venta: item.fecha_venta,
+            area_m2: item.area_m2
           })));
         }
       } catch (e) {
@@ -71,8 +73,8 @@ const Ventas = () => {
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
-    if (!nuevaVenta.asesor) {
-      setMensaje({ tipo: 'error', texto: 'El Asesor es obligatorio.' });
+    if (!nuevaVenta.asesor || !nuevaVenta.area_m2) {
+      setMensaje({ tipo: 'error', texto: 'Asesor y Área son obligatorios.' });
       return;
     }
 
@@ -82,7 +84,8 @@ const Ventas = () => {
     const nueva = {
       asesor_id: asesorBd && !asesorBd.id.includes('fallback') ? asesorBd.id : null,
       fecha_venta: fechaHora,
-      cliente_nombre: 'Cliente Rápido' // Según schema
+      cliente_nombre: 'Cliente Rápido', // Según schema
+      area_m2: parseFloat(nuevaVenta.area_m2) || 0
     };
 
     setCargando(true);
@@ -90,9 +93,9 @@ const Ventas = () => {
       if (nueva.asesor_id) {
         const { data, error } = await supabase.from('ventas').insert([nueva]).select('id');
         if (error) throw error;
-        setDatos([{ id: data[0].id, asesor: nuevaVenta.asesor, fecha_venta: fechaHora }, ...datos]);
+        setDatos([{ id: data[0].id, asesor: nuevaVenta.asesor, fecha_venta: fechaHora, area_m2: nueva.area_m2 }, ...datos]);
       } else {
-        setDatos([{ id: `temp-${Date.now()}`, asesor: nuevaVenta.asesor, fecha_venta: fechaHora }, ...datos]);
+        setDatos([{ id: `temp-${Date.now()}`, asesor: nuevaVenta.asesor, fecha_venta: fechaHora, area_m2: nueva.area_m2 }, ...datos]);
       }
       setMensaje({ tipo: 'success', texto: '¡Venta registrada exitosamente!' });
     } catch (err) {
@@ -176,6 +179,15 @@ const Ventas = () => {
                 {asesoresListaOriginal.map((a, i) => <option key={i} value={a}>{a}</option>)}
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Área (m²)</label>
+              <input 
+                type="number" step="0.01" min="0" required
+                value={nuevaVenta.area_m2} onChange={e => setNuevaVenta({...nuevaVenta, area_m2: e.target.value})}
+                placeholder="Ej. 120.5"
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-pachamama-green p-3 border bg-white"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
@@ -229,7 +241,7 @@ const Ventas = () => {
                       <div className="flex-1">
                         <p className="text-sm font-semibold text-gray-900">{venta.asesor}</p>
                         <p className="text-xs text-gray-500">
-                          {format(new Date(venta.fecha_venta), "HH:mm")} hrs
+                          {format(new Date(venta.fecha_venta), "HH:mm")} hrs • {venta.area_m2} m²
                         </p>
                       </div>
                       <div className="text-pachamama-green">

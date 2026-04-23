@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS ventas (
   asesor_id UUID REFERENCES asesores(id) ON DELETE CASCADE,
   cliente_nombre VARCHAR(255),
   monto DECIMAL(12, 2) DEFAULT 0,
+  area_m2 DECIMAL(10, 2),
   proyecto VARCHAR(255),
   fecha_venta TIMESTAMP WITH TIME ZONE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL

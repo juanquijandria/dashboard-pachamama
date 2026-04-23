@@ -123,24 +123,25 @@ const AvanceAsesores = () => {
         const sheet = workbook.Sheets[sheetName];
         const parsedData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-        const nuevosDatos = [...datos];
+        const nuevosDatos = [];
 
         parsedData.forEach(row => {
-          const usuarioStr = (row['Usuario'] || '').toString().trim();
+          const rawStr = (row['Usuario'] || '').toString();
+          const usuarioStr = rawStr.replace(/\s+/g, ' ').trim();
+          
           const leads = parseInt(row['CantLeadsGestionados'] || row['Cant Leads Gestionados'] || '0', 10);
           const efectivas = parseInt(row['AccionesEfectiva'] || row['Acciones Efectiva'] || '0', 10);
 
           if (usuarioStr) {
-            const normExcel = usuarioStr.toLowerCase().trim();
+            const normExcel = usuarioStr.toLowerCase();
             const indice = nuevosDatos.findIndex(d => 
-              (d.asesor || '').toLowerCase().trim() === normExcel
+              (d.asesor || '').toLowerCase() === normExcel
             );
             
             if (indice !== -1) {
-              nuevosDatos[indice].cant_leads_gestionados = leads;
-              nuevosDatos[indice].acciones_efectivas = efectivas;
+              nuevosDatos[indice].cant_leads_gestionados += leads;
+              nuevosDatos[indice].acciones_efectivas += efectivas;
             } else {
-              // Si no lo encuentra, lo agregamos (opcional, dependiendo de regla de negocio)
               nuevosDatos.push({
                 asesor: usuarioStr,
                 cant_leads_gestionados: leads,
