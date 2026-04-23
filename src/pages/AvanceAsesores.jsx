@@ -16,13 +16,14 @@ import {
 } from 'lucide-react';
 
 const asesoresListaOriginal = [
-  'Adrian Emir Flores Cossio',
+  'Adrian emir Flores Cossio',
+  'Andrea antuane Valerio Moreno',
   'Brunella Sanchez Velasco',
-  'Segundo Adelmo Gutierrez Barrios',
-  'Andrea Antuane Valerio Moreno',
+  'Elizabeth Angelica Yataco Limon',
   'Fátima Lucia Abad Rios',
-  'Jhon Bryan Pullo Perales',
-  'Vanessa Albornoz Moncada'
+  'Jhon bryan Pullo Perales',
+  'Segundo Adelmo Gutierrez Barrios',
+  'Vanessa Lisett Albornoz Moncada'
 ];
 
 const AvanceAsesores = () => {
@@ -130,20 +131,10 @@ const AvanceAsesores = () => {
           const efectivas = parseInt(row['AccionesEfectiva'] || row['Acciones Efectiva'] || '0', 10);
 
           if (usuarioStr) {
-            const normExcel = usuarioStr.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            
-            const indice = nuevosDatos.findIndex(d => {
-              const normAsesor = (d.asesor || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-              if (normExcel.includes(normAsesor) || normAsesor.includes(normExcel)) return true;
-              
-              const parts = normAsesor.split(' ');
-              if (parts.length >= 2) {
-                const firstName = parts[0];
-                const lastNames = parts.slice(1);
-                return normExcel.includes(firstName) && lastNames.some(ln => normExcel.includes(ln));
-              }
-              return false;
-            });
+            const normExcel = usuarioStr.toLowerCase().trim();
+            const indice = nuevosDatos.findIndex(d => 
+              (d.asesor || '').toLowerCase().trim() === normExcel
+            );
             
             if (indice !== -1) {
               nuevosDatos[indice].cant_leads_gestionados = leads;

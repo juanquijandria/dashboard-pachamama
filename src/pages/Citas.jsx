@@ -12,14 +12,37 @@ import {
 } from 'recharts';
 
 const asesoresListaOriginal = [
-  'Adrian Emir Flores Cossio',
+  'Adrian emir Flores Cossio',
+  'Andrea antuane Valerio Moreno',
   'Brunella Sanchez Velasco',
-  'Segundo Adelmo Gutierrez Barrios',
-  'Andrea Antuane Valerio Moreno',
+  'Elizabeth Angelica Yataco Limon',
   'Fátima Lucia Abad Rios',
-  'Jhon Bryan Pullo Perales',
-  'Vanessa Albornoz Moncada'
+  'Jhon bryan Pullo Perales',
+  'Segundo Adelmo Gutierrez Barrios',
+  'Vanessa Lisett Albornoz Moncada'
 ];
+
+const parseExcelDate = (dateStr) => {
+  if (!dateStr) return new Date().toISOString();
+  try {
+    const parts = dateStr.toString().trim().split(' ');
+    const datePart = parts[0];
+    const timePart = parts[1] || '00:00';
+    
+    if (datePart.includes('/')) {
+      const [day, month, year] = datePart.split('/');
+      if (day && month && year) {
+        const [hour, minute] = timePart.split(':');
+        return new Date(year, month - 1, day, hour || 0, minute || 0).toISOString();
+      }
+    }
+    const fallbackDate = new Date(dateStr);
+    if (!isNaN(fallbackDate.getTime())) return fallbackDate.toISOString();
+    return new Date().toISOString();
+  } catch (err) {
+    return new Date().toISOString();
+  }
+};
 
 const Citas = () => {
   const [datos, setDatos] = useState([]);
@@ -113,22 +136,18 @@ const Citas = () => {
         const nuevosDatos = [...datos];
 
         parsedData.forEach(row => {
-          const asesor = (row['Responsable_de_cita'] || row['Responsable de cita'] || '').toString().trim() || 'Desconocido';
+          const rawAsesor = (row['Responsable_de_cita'] || row['Responsable de cita'] || '').toString().trim();
+          const matchExato = asesoresDb.find(a => a.nombre.toLowerCase() === rawAsesor.toLowerCase());
+          const asesor = matchExato ? matchExato.nombre : (rawAsesor || 'Desconocido');
+          
           const fechaOriginal = row['Fecha_de_cita'] || row['Fecha de cita'];
           const tipo = (row['Tipo_de_cita'] || row['Tipo de cita'] || '').toString().trim() || 'General';
           const interes = (row['Nivel_de_Interes'] || row['Nivel de Interes'] || '').toString().trim() || 'Medio';
           const estado = (row['Estado_de_cita'] || row['Estado de cita'] || '').toString().trim() || 'Pendiente';
           
-          let fechaFormateada = new Date().toISOString();
-          if (fechaOriginal) {
-            // Excel dates might be numeric if parsed directly, but usually text if defval is used or formatted.
-            try {
-              const d = new Date(fechaOriginal);
-              if (!isNaN(d.getTime())) fechaFormateada = d.toISOString();
-            } catch (err) {}
-          }
+          const fechaFormateada = parseExcelDate(fechaOriginal);
 
-          nuevosDatos.unshift({
+          nuevosDatos.push({
             bd_id: `temp-${Date.now()}-${Math.random()}`,
             asesor,
             fecha_hora: fechaFormateada,
@@ -276,7 +295,7 @@ const Citas = () => {
     const pasaAsesor = filtroAsesor ? d.asesor === filtroAsesor : true;
     const pasaEstado = filtroEstado ? d.estado === filtroEstado : true;
     return pasaAsesor && pasaEstado;
-  });
+  }).sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
 
   // Datos para el gráfico
   const dataGrafico = asesoresListaOriginal.map(nombre => {
@@ -496,9 +515,15 @@ const Citas = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center text-sm text-gray-600">
-                          <Clock className="h-4 w-4 mr-2 text-gray-400" />
-                          {format(new Date(row.fecha_hora), "dd/MM/yyyy HH:mm")}
+                        <div className="flex flex-col text-sm text-gray-900 font-semibold">
+                          <span className="flex items-center">
+                            <Calendar className="h-3.5 w-3.5 mr-1 text-gray-400" />
+                            {format(new Date(row.fecha_hora), "dd/MM/yyyy")}
+                          </span>
+                          <span className="flex items-center text-gray-500 mt-1 text-xs">
+                            <Clock className="h-3.5 w-3.5 mr-1 text-gray-400" />
+                            {format(new Date(row.fecha_hora), "HH:mm")} hrs
+                          </span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

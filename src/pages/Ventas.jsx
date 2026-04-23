@@ -6,13 +6,14 @@ import html2canvas from 'html2canvas';
 import { CheckCircle2, Zap, TrendingUp, Image as ImageIcon } from 'lucide-react';
 
 const asesoresListaOriginal = [
-  'Adrian Emir Flores Cossio',
+  'Adrian emir Flores Cossio',
+  'Andrea antuane Valerio Moreno',
   'Brunella Sanchez Velasco',
-  'Segundo Adelmo Gutierrez Barrios',
-  'Andrea Antuane Valerio Moreno',
+  'Elizabeth Angelica Yataco Limon',
   'Fátima Lucia Abad Rios',
-  'Jhon Bryan Pullo Perales',
-  'Vanessa Albornoz Moncada'
+  'Jhon bryan Pullo Perales',
+  'Segundo Adelmo Gutierrez Barrios',
+  'Vanessa Lisett Albornoz Moncada'
 ];
 
 const Ventas = () => {
