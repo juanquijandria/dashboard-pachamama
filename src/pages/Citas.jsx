@@ -213,6 +213,7 @@ const Citas = () => {
           const tipo = (row['Tipo_de_cita'] || row['Tipo de cita'] || '').toString().trim() || 'General';
           const interes = (row['Nivel_de_Interes'] || row['Nivel de Interes'] || '').toString().trim() || 'Medio';
           const estado = (row['Estado_de_cita'] || row['Estado de cita'] || '').toString().trim() || 'Pendiente';
+          const cliente = (row['Cliente'] || row['Nombre_del_cliente'] || row['Nombre del cliente'] || row['cliente_nombre'] || '').toString().trim() || 'Importado de Excel';
 
           // RULE 2: read ONLY "Fecha_de_cita" and split into dateOnly + timeOnly.
           const { dateOnly, timeOnly, iso } = splitExcelDateTime(row['Fecha_de_cita']);
@@ -226,7 +227,7 @@ const Citas = () => {
             tipo_cita: tipo,
             nivel_interes: interes,
             estado: estado,
-            cliente_nombre: 'Importado de Excel',
+            cliente_nombre: cliente,
             esNuevo: true
           });
         });
@@ -301,13 +302,17 @@ const Citas = () => {
     }
 
     try {
+      const asesoresNoEncontrados = [];
       const insertData = nuevasCitas.map(item => {
-        const asesorBd = asesoresDb.find(a => 
-          a.nombre.toLowerCase() === item.asesor.toLowerCase() || 
+        const asesorBd = asesoresDb.find(a =>
+          a.nombre.toLowerCase() === item.asesor.toLowerCase() ||
           item.asesor.toLowerCase().includes(a.nombre.toLowerCase())
         );
-        
-        if (!asesorBd || asesorBd.id.toString().includes('fallback')) return null;
+
+        if (!asesorBd || asesorBd.id.toString().includes('fallback')) {
+          asesoresNoEncontrados.push(item.asesor);
+          return null;
+        }
 
         return {
           asesor_id: asesorBd.id,
@@ -319,15 +324,28 @@ const Citas = () => {
         };
       }).filter(Boolean);
 
-      if (insertData.length > 0) {
-        const { error } = await supabase.from('citas').insert(insertData);
-        if (error) throw error;
-        
-        // Remove 'esNuevo' flags
-        setDatos(datos.map(d => ({ ...d, esNuevo: false })));
-        setMensaje({ tipo: 'success', texto: 'Citas guardadas exitosamente en la BD.' });
+      if (insertData.length === 0) {
+        const nombresUnicos = [...new Set(asesoresNoEncontrados)].join(', ');
+        setMensaje({
+          tipo: 'error',
+          texto: `No se pudo guardar: ningún asesor del Excel coincide con los asesores registrados en el sistema. Asesores no encontrados: ${nombresUnicos}`
+        });
+        return;
+      }
+
+      const { error } = await supabase.from('citas').insert(insertData);
+      if (error) throw error;
+
+      setDatos(datos.map(d => ({ ...d, esNuevo: false })));
+
+      if (asesoresNoEncontrados.length > 0) {
+        const nombresUnicos = [...new Set(asesoresNoEncontrados)].join(', ');
+        setMensaje({
+          tipo: 'warning',
+          texto: `Se guardaron ${insertData.length} citas. Se omitieron ${asesoresNoEncontrados.length} porque estos asesores no existen en el sistema: ${nombresUnicos}`
+        });
       } else {
-        setMensaje({ tipo: 'warning', texto: 'Modo local: Configura Supabase para guardar permanentemente.' });
+        setMensaje({ tipo: 'success', texto: 'Citas guardadas exitosamente en la BD.' });
       }
     } catch (e) {
       setMensaje({ tipo: 'error', texto: 'Error al conectar con la base de datos.' });
