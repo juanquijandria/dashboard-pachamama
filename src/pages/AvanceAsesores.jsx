@@ -27,7 +27,7 @@ const asesoresListaOriginal = [
 
 const AvanceAsesores = () => {
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date().toISOString().split('T')[0]);
-  const [metaDiaria, setMetaDiaria] = useState(15);
+  const [metaDiaria, setMetaDiaria] = useState(70);
   const [modoCiego, setModoCiego] = useState(false);
   const [datos, setDatos] = useState([]);
   const [asesoresDb, setAsesoresDb] = useState([]);
@@ -241,15 +241,15 @@ const AvanceAsesores = () => {
     }
   };
 
-  const calcularAvance = (efectivas) => {
+  const calcularAvance = (gestiones) => {
     if (!metaDiaria || metaDiaria <= 0) return 0;
-    return Math.min(Math.round((efectivas / metaDiaria) * 100), 100);
+    return Math.min(Math.round((gestiones / metaDiaria) * 100), 100);
   };
 
-  const getColorAvance = (porcentaje) => {
-    if (porcentaje >= 100) return 'text-green-600 bg-green-100';
-    if (porcentaje >= 50) return 'text-yellow-600 bg-yellow-100';
-    return 'text-red-600 bg-red-100';
+  const getRowGradient = (porcentaje) => {
+    if (porcentaje >= 80) return 'bg-gradient-to-r from-green-50 to-green-100/50 text-green-900 border-b border-green-200';
+    if (porcentaje >= 40) return 'bg-gradient-to-r from-yellow-50 to-orange-50 text-orange-900 border-b border-orange-100';
+    return 'bg-gradient-to-r from-red-50 to-red-100/50 text-red-900 border-b border-red-200';
   };
 
   const datosOrdenados = [...datos].sort((a, b) => (b.cant_leads_gestionados || 0) - (a.cant_leads_gestionados || 0));
@@ -321,7 +321,7 @@ const AvanceAsesores = () => {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Meta Diaria (Efectivas)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Meta Diaria de Gestiones</label>
             <input
               type="number"
               min="1"
@@ -346,13 +346,40 @@ const AvanceAsesores = () => {
           </div>
         </div>
 
+        {/* Píldoras para Ocultar Asesores */}
+        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+          <label className="block text-sm font-bold text-gray-700 mb-3">Filtrar Asesores (Clic para ocultar/mostrar)</label>
+          <div className="flex flex-wrap gap-2">
+            {datosOrdenados.map((d, idx) => {
+              const estaOculto = asesoresOcultos.includes(d.asesor);
+              return (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    if (estaOculto) {
+                      setAsesoresOcultos(asesoresOcultos.filter(a => a !== d.asesor));
+                    } else {
+                      setAsesoresOcultos([...asesoresOcultos, d.asesor]);
+                    }
+                  }}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-all ${
+                    estaOculto ? 'bg-gray-200 text-gray-400 border-gray-300 hover:bg-gray-300 hover:text-gray-600' : 'bg-pachamama-green text-white border-green-700 shadow-sm hover:bg-green-700'
+                  }`}
+                >
+                  {modoCiego ? `Asesor ${idx+1}` : d.asesor.split(' ').slice(0,2).join(' ')}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Tabla generable como Imagen */}
         <div className="mt-8 overflow-x-auto rounded-lg border border-gray-200" ref={tablaRef}>
           {/* Header para la imagen copiada */}
           <div className="bg-pachamama-earth text-white p-4 text-center">
             <h3 className="text-lg font-bold">Avance Diario de Asesores</h3>
-            <p className="text-sm opacity-90">
-              {format(parseISO(fechaSeleccionada), "EEEE d 'de' MMMM 'de' yyyy", { locale: es }).replace(/^\w/, c => c.toUpperCase())} | Meta Diaria: {metaDiaria} Efectivas
+            <p className="text-sm opacity-90 font-medium">
+              {format(parseISO(fechaSeleccionada), "EEEE d 'de' MMMM 'de' yyyy", { locale: es }).replace(/^\w/, c => c.toUpperCase())} | {new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })} | Meta: {metaDiaria} Gestiones
             </p>
           </div>
           <table className="min-w-full divide-y divide-gray-200">
@@ -380,40 +407,27 @@ const AvanceAsesores = () => {
                   </td>
                 </tr>
               ) : datosVisibles.map((row, index) => {
-                const avance = calcularAvance(row.acciones_efectivas);
+                const avance = calcularAvance(row.cant_leads_gestionados);
                 return (
-                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                  <tr key={index} className={`transition-all hover:opacity-90 ${getRowGradient(avance)}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <div className="h-8 w-8 rounded-full bg-pachamama-green/20 text-pachamama-green flex items-center justify-center font-bold text-xs mr-3">
-                            {modoCiego ? `A${index+1}` : row.asesor.split(' ').map(n => n[0]).slice(0,2).join('')}
-                          </div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {modoCiego ? `Asesor ${index + 1}` : row.asesor}
-                          </div>
+                      <div className="flex items-center">
+                        <div className="h-8 w-8 rounded-full bg-white/60 border border-black/5 flex items-center justify-center font-bold text-xs mr-3 shadow-sm">
+                          {modoCiego ? `A${index+1}` : row.asesor.split(' ').map(n => n[0]).slice(0,2).join('')}
                         </div>
-                        {!modoCiego && (
-                          <button 
-                            onClick={() => setAsesoresOcultos([...asesoresOcultos, row.asesor])}
-                            className="text-gray-300 hover:text-red-500 transition-colors"
-                            title="Ocultar Asesor"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                        <div className="text-sm font-bold">
+                          {modoCiego ? `Asesor ${index + 1}` : row.asesor}
+                        </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600 font-semibold">
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-black">
                       {row.cant_leads_gestionados}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className="text-sm font-bold text-gray-900">
-                        {row.acciones_efectivas}
-                      </span>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-semibold opacity-80">
+                      {row.acciones_efectivas}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getColorAvance(avance)}`}>
+                      <span className="text-base font-black">
                         {avance}%
                       </span>
                     </td>
