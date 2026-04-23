@@ -1,0 +1,405 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../lib/supabase';
+import Papa from 'papaparse';
+import html2canvas from 'html2canvas';
+import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { 
+  Calendar as CalendarIcon, 
+  Upload, 
+  EyeOff, 
+  Eye, 
+  Image as ImageIcon, 
+  Save,
+  CheckCircle2
+} from 'lucide-react';
+
+const asesoresListaOriginal = [
+  'Adrian Emir Flores Cossio',
+  'Brunella Sanchez Velasco',
+  'Segundo Adelmo Gutierrez Barrios',
+  'Andrea Antuane Valerio Moreno',
+  'Fátima Lucia Abad Rios',
+  'Jhon Bryan Pullo Perales',
+  'Vanessa Albornoz Moncada'
+];
+
+const AvanceAsesores = () => {
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date().toISOString().split('T')[0]);
+  const [metaDiaria, setMetaDiaria] = useState(15);
+  const [modoCiego, setModoCiego] = useState(false);
+  const [datos, setDatos] = useState([]);
+  const [asesoresDb, setAsesoresDb] = useState([]);
+  const [cargando, setCargando] = useState(false);
+  const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
+  
+  const tablaRef = useRef(null);
+
+  // Cargar lista de asesores de la BD o usar fallback
+  useEffect(() => {
+    const cargarAsesores = async () => {
+      try {
+        const { data, error } = await supabase.from('asesores').select('*');
+        if (data && data.length > 0 && !error) {
+          setAsesoresDb(data);
+        } else {
+          // Fallback
+          setAsesoresDb(asesoresListaOriginal.map((nombre, i) => ({
+            id: `fallback-id-${i}`,
+            nombre
+          })));
+        }
+      } catch (e) {
+        setAsesoresDb(asesoresListaOriginal.map((nombre, i) => ({
+          id: `fallback-id-${i}`,
+          nombre
+        })));
+      }
+    };
+    cargarAsesores();
+  }, []);
+
+  // Cargar datos del día seleccionado
+  useEffect(() => {
+    const cargarGestiones = async () => {
+      setCargando(true);
+      try {
+        const { data, error } = await supabase
+          .from('gestiones_diarias')
+          .select(`
+            id,
+            asesor_id,
+            cant_leads_gestionados,
+            acciones_efectivas,
+            asesores (nombre)
+          `)
+          .eq('fecha', fechaSeleccionada);
+          
+        if (data && !error && data.length > 0) {
+          const gestionesMapeadas = data.map(item => ({
+            asesor: item.asesores?.nombre || 'Desconocido',
+            cant_leads_gestionados: item.cant_leads_gestionados,
+            acciones_efectivas: item.acciones_efectivas,
+            bd_id: item.id
+          }));
+          setDatos(gestionesMapeadas);
+        } else {
+          // Iniciar vacío o simular si no hay BD
+          setDatos(asesoresDb.map(a => ({
+            asesor: a.nombre,
+            cant_leads_gestionados: 0,
+            acciones_efectivas: 0,
+          })));
+        }
+      } catch (e) {
+        setDatos(asesoresDb.map(a => ({
+          asesor: a.nombre,
+          cant_leads_gestionados: 0,
+          acciones_efectivas: 0,
+        })));
+      } finally {
+        setCargando(false);
+      }
+    };
+    
+    if (asesoresDb.length > 0) {
+      cargarGestiones();
+    }
+  }, [fechaSeleccionada, asesoresDb]);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const parsedData = results.data;
+        const nuevosDatos = [...datos];
+
+        parsedData.forEach(row => {
+          // Mapear "Usuario" a "asesor", "CantLeadsGestionados" y "AccionesEfectiva"
+          const usuarioStr = row['Usuario']?.trim();
+          const leads = parseInt(row['CantLeadsGestionados'] || row['Cant Leads Gestionados'] || '0', 10);
+          const efectivas = parseInt(row['AccionesEfectiva'] || row['Acciones Efectiva'] || '0', 10);
+
+          if (usuarioStr) {
+            // Buscar el asesor más parecido o que incluya el nombre
+            const indice = nuevosDatos.findIndex(d => 
+              d.asesor.toLowerCase().includes(usuarioStr.toLowerCase()) || 
+              usuarioStr.toLowerCase().includes(d.asesor.toLowerCase())
+            );
+            
+            if (indice !== -1) {
+              nuevosDatos[indice].cant_leads_gestionados = leads;
+              nuevosDatos[indice].acciones_efectivas = efectivas;
+            } else {
+              // Si no lo encuentra, lo agregamos (opcional, dependiendo de regla de negocio)
+              nuevosDatos.push({
+                asesor: usuarioStr,
+                cant_leads_gestionados: leads,
+                acciones_efectivas: efectivas
+              });
+            }
+          }
+        });
+
+        setDatos(nuevosDatos);
+        setMensaje({ tipo: 'success', texto: 'CSV importado. Recuerda guardar los cambios.' });
+        
+        // Limpiar el input file
+        e.target.value = null;
+      },
+      error: (error) => {
+        setMensaje({ tipo: 'error', texto: `Error procesando CSV: ${error.message}` });
+      }
+    });
+  };
+
+  const guardarEnBD = async () => {
+    setCargando(true);
+    setMensaje({ tipo: '', texto: '' });
+    
+    try {
+      // Filtrar y preparar datos para Supabase
+      const insertData = datos.map(item => {
+        const asesorBd = asesoresDb.find(a => 
+          a.nombre.toLowerCase() === item.asesor.toLowerCase()
+        );
+        
+        if (!asesorBd || asesorBd.id.toString().includes('fallback')) {
+          return null;
+        }
+
+        return {
+          asesor_id: asesorBd.id,
+          cant_leads_gestionados: item.cant_leads_gestionados,
+          acciones_efectivas: item.acciones_efectivas,
+          fecha: fechaSeleccionada
+        };
+      }).filter(Boolean);
+
+      if (insertData.length > 0) {
+        // En una app real, podrías querer hacer un borrado previo para la misma fecha o upsert
+        const { error } = await supabase.from('gestiones_diarias').upsert(
+          insertData,
+          { onConflict: 'asesor_id, fecha' } // Asumiendo que quisieras un composite key
+        );
+        
+        if (error) {
+          // Si falla el upsert (por falta de constraints), intentamos borrado previo e insert
+          await supabase.from('gestiones_diarias').delete().eq('fecha', fechaSeleccionada);
+          await supabase.from('gestiones_diarias').insert(insertData);
+        }
+        setMensaje({ tipo: 'success', texto: 'Datos guardados correctamente.' });
+      } else {
+        setMensaje({ tipo: 'warning', texto: 'No hay datos válidos para guardar en BD (comprueba conexión).' });
+      }
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: 'Hubo un problema al guardar. Operando en modo local.' });
+    } finally {
+      setCargando(false);
+      setTimeout(() => setMensaje({ tipo: '', texto: '' }), 3000);
+    }
+  };
+
+  const copiarImagen = async () => {
+    if (tablaRef.current) {
+      try {
+        const canvas = await html2canvas(tablaRef.current, {
+          backgroundColor: '#ffffff',
+          scale: 2 // Mejor calidad
+        });
+        
+        canvas.toBlob(async (blob) => {
+          try {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob })
+            ]);
+            setMensaje({ tipo: 'success', texto: '¡Imagen copiada al portapapeles!' });
+          } catch (err) {
+            setMensaje({ tipo: 'error', texto: 'No se pudo copiar la imagen (permisos de navegador).' });
+          }
+        });
+      } catch (err) {
+        setMensaje({ tipo: 'error', texto: 'Error al generar la imagen.' });
+      }
+      setTimeout(() => setMensaje({ tipo: '', texto: '' }), 3000);
+    }
+  };
+
+  const calcularAvance = (efectivas) => {
+    if (!metaDiaria || metaDiaria <= 0) return 0;
+    return Math.min(Math.round((efectivas / metaDiaria) * 100), 100);
+  };
+
+  const getColorAvance = (porcentaje) => {
+    if (porcentaje >= 100) return 'text-green-600 bg-green-100';
+    if (porcentaje >= 70) return 'text-yellow-600 bg-yellow-100';
+    return 'text-red-600 bg-red-100';
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Avance de Asesores</h2>
+          <p className="text-sm text-gray-500">Gestiones diarias, leads y acciones efectivas.</p>
+        </div>
+        
+        <div className="flex flex-wrap gap-3">
+          <button 
+            onClick={() => setModoCiego(!modoCiego)}
+            className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors border border-gray-300 text-sm font-medium"
+          >
+            {modoCiego ? <Eye className="h-4 w-4 mr-2" /> : <EyeOff className="h-4 w-4 mr-2" />}
+            {modoCiego ? "Modo Normal" : "Modo Ciego"}
+          </button>
+          
+          <button 
+            onClick={copiarImagen}
+            className="flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-sm font-medium"
+          >
+            <ImageIcon className="h-4 w-4 mr-2" />
+            Copiar Imagen
+          </button>
+          
+          <button 
+            onClick={guardarEnBD}
+            disabled={cargando}
+            className="flex items-center px-4 py-2 bg-pachamama-green text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50"
+          >
+            <Save className="h-4 w-4 mr-2" />
+            Guardar
+          </button>
+        </div>
+      </div>
+
+      {mensaje.texto && (
+        <div className={`p-4 rounded-md flex items-center ${
+          mensaje.tipo === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
+          mensaje.tipo === 'warning' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+          'bg-green-50 text-green-700 border border-green-200'
+        }`}>
+          <CheckCircle2 className="h-5 w-5 mr-2" />
+          {mensaje.texto}
+        </div>
+      )}
+
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
+        {/* Controles: Fecha, Meta, CSV */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Gestión</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <CalendarIcon className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="date"
+                value={fechaSeleccionada}
+                onChange={(e) => setFechaSeleccionada(e.target.value)}
+                className="pl-10 block w-full shadow-sm focus:ring-pachamama-green focus:border-pachamama-green sm:text-sm border-gray-300 rounded-md p-2 border"
+              />
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Meta Diaria (Efectivas)</label>
+            <input
+              type="number"
+              min="1"
+              value={metaDiaria}
+              onChange={(e) => setMetaDiaria(parseInt(e.target.value) || 0)}
+              className="block w-full shadow-sm focus:ring-pachamama-green focus:border-pachamama-green sm:text-sm border-gray-300 rounded-md p-2 border"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Importar CSV de Gestiones</label>
+            <div className="relative border-2 border-dashed border-gray-300 rounded-md p-2 text-center hover:bg-gray-50 transition-colors cursor-pointer flex items-center justify-center">
+              <Upload className="h-5 w-5 text-gray-400 mr-2" />
+              <span className="text-sm text-gray-600">Subir CSV</span>
+              <input 
+                type="file" 
+                accept=".csv" 
+                onChange={handleFileUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Tabla generable como Imagen */}
+        <div className="mt-8 overflow-x-auto rounded-lg border border-gray-200" ref={tablaRef}>
+          {/* Header para la imagen copiada */}
+          <div className="bg-pachamama-earth text-white p-4 text-center">
+            <h3 className="text-lg font-bold">Avance Diario de Asesores</h3>
+            <p className="text-sm opacity-90">
+              {format(parseISO(fechaSeleccionada), "EEEE d 'de' MMMM 'de' yyyy", { locale: es }).replace(/^\w/, c => c.toUpperCase())} | Meta Diaria: {metaDiaria} Efectivas
+            </p>
+          </div>
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Asesor
+                </th>
+                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Gestiones (Leads)
+                </th>
+                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Acciones Efectivas
+                </th>
+                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Avance %
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {cargando ? (
+                <tr>
+                  <td colSpan="4" className="px-6 py-10 text-center text-gray-500">
+                    Cargando datos...
+                  </td>
+                </tr>
+              ) : datos.map((row, index) => {
+                const avance = calcularAvance(row.acciones_efectivas);
+                return (
+                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="h-8 w-8 rounded-full bg-pachamama-green/20 text-pachamama-green flex items-center justify-center font-bold text-xs mr-3">
+                          {modoCiego ? `A${index+1}` : row.asesor.split(' ').map(n => n[0]).slice(0,2).join('')}
+                        </div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {modoCiego ? `Asesor ${index + 1}` : row.asesor}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600 font-semibold">
+                      {row.cant_leads_gestionados}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className="text-sm font-bold text-gray-900">
+                        {row.acciones_efectivas}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getColorAvance(avance)}`}>
+                        {avance}%
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AvanceAsesores;
